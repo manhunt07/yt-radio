@@ -2,8 +2,10 @@
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -12,6 +14,22 @@ SCRIPT = Path(__file__).resolve().parents[1] / "yt-radio.py"
 SPEC = importlib.util.spec_from_file_location("yt_radio", SCRIPT)
 radio = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(radio)
+
+
+class DependencyTests(unittest.TestCase):
+    def test_finds_ytdlp_next_to_venv_python_without_activation(self):
+        with tempfile.TemporaryDirectory() as folder:
+            name = "yt-dlp.exe" if os.name == "nt" else "yt-dlp"
+            executable = Path(folder) / name
+            executable.touch(mode=0o755)
+            with patch.object(radio.sys, "executable", str(Path(folder) / "python")):
+                self.assertEqual(radio.find_ytdlp(), str(executable))
+
+    @patch.object(radio.shutil, "which")
+    def test_finds_platform_player(self, which):
+        which.return_value = "terminal-player"
+        self.assertEqual(radio.find_mpv(), "terminal-player")
+        which.assert_called_once_with("mpv.com" if os.name == "nt" else "mpv")
 
 
 class SearchTests(unittest.TestCase):
@@ -40,6 +58,24 @@ class SearchTests(unittest.TestCase):
 
 
 class PlayerTests(unittest.TestCase):
+    def test_track_details_wrap_without_dropping_title_or_url(self):
+        url = "https://www.youtube.com/watch?v=0123456789A"
+        lines = radio.wrap_field("URL", url, 23)
+        self.assertTrue(all(len(line) <= 23 for line in lines))
+        self.assertEqual("".join(line[11:] for line in lines), url)
+        lines = radio.wrap_field("Title", "世界" * 20, 23)
+        self.assertEqual("".join(line[11:] for line in lines), "世界" * 20)
+        self.assertTrue(all(len(line[11:]) * 2 + 11 <= 23 for line in lines))
+
+    def test_cassette_metadata_can_contain_lua_delimiters(self):
+        source = radio.cassette_source(
+            [("0123456789A", "First track ]=]", "Channel", "5:03")],
+            ["https://www.youtube.com/watch?v=0123456789A"], 80,
+        )
+        self.assertIn("utils.parse_json([==[", source)
+        self.assertIn("First track ]=]", source)
+        self.assertNotIn("@WIDTH@", source)
+
     @patch("builtins.print")
     @patch("builtins.input", side_effect=["99", "2"])
     def test_menu_reprompts_and_returns_zero_based_index(self, _input, _print):
