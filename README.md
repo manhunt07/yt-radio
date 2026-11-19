@@ -36,7 +36,7 @@ YT Radio is a desktop terminal app. Choose the steps for your operating system. 
 On the GitHub repository, click **Code → Download ZIP**, extract it, and open a terminal in the extracted folder. If you already have Git, copy the HTTPS URL from **Code**, then replace the example URL below:
 
 ~~~bash
-git clone https://github.com/YOUR_USERNAME/yt-radio.git
+git clone https://github.com/manhunt07/yt-radio.git
 cd yt-radio
 ~~~
 
